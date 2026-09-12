@@ -17,19 +17,28 @@ async function search(q: string): Promise<SearchHit[]> {
   return res.data;
 }
 
-// Wiki search matches whole phrases: "SAP integration" can miss a page that says "SAP". Retry word by word.
+// Wiki search matches whole phrases and word prefixes: "SAP integration" can miss a page that says "SAP", and
+// "on-premise" misses "on-prem". Retry word by word (hyphen parts too), then with 4-letter stems of long words.
 async function searchWithFallback(query: string): Promise<SearchHit[]> {
   const direct = await search(query);
   if (direct.length > 0) return direct;
-  const words = query
-    .toLowerCase()
-    .split(/[^a-z0-9/-]+/)
-    .filter((w) => w.length > 2 && !STOP_WORDS.has(w))
-    .sort((a, b) => b.length - a.length);
+  const words = [
+    ...new Set(
+      query
+        .toLowerCase()
+        .split(/[^a-z0-9/-]+/)
+        .flatMap((w) => (w.includes("-") ? [w, ...w.split("-")] : [w]))
+        .filter((w) => w.length > 2 && !STOP_WORDS.has(w)),
+    ),
+  ].sort((a, b) => b.length - a.length);
+  const stems = [...new Set(words.filter((w) => w.length >= 6).map((w) => w.slice(0, 4)))];
   const seen = new Map<string, SearchHit>();
-  for (const word of words) {
-    for (const hit of await search(word)) seen.set(hit.id, hit);
-    if (seen.size >= MAX_HITS) break;
+  for (const candidates of [words, stems]) {
+    for (const word of candidates) {
+      for (const hit of await search(word)) seen.set(hit.id, hit);
+      if (seen.size >= MAX_HITS) break;
+    }
+    if (seen.size > 0) break;
   }
   return [...seen.values()].slice(0, MAX_HITS);
 }

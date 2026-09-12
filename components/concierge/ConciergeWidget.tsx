@@ -4,16 +4,22 @@ import { CopilotPopup, ToolCallStatus, useHumanInTheLoop, useRenderTool } from "
 import {
   TOOL,
   bookMeetingParams,
+  captureEmailParams,
   chooseSlotParams,
   createLeadParams,
   searchKnowledgeParams,
   type BookMeetingResult,
+  type CaptureEmailResult,
   type ChooseSlotResult,
   type CreateLeadResult,
+  type LogGapResult,
   type SearchKnowledgeResult,
   getSlotsParams,
+  logGapParams,
 } from "@/lib/contracts";
 import { BookedCard, BookedCardLoading } from "./cards/BookedCard";
+import { EmailCapture, EmailCaptured } from "./cards/EmailCapture";
+import { GapCard, GapCardLoading } from "./cards/GapCard";
 import { LeadCard, LeadCardLoading } from "./cards/LeadCard";
 import { parseResult } from "./cards/parse";
 import { SlotPicked, SlotPicker, SlotPickerLoading } from "./cards/SlotPicker";
@@ -88,6 +94,36 @@ export function ConciergeWidget() {
         if (status !== "complete") return <BookedCardLoading />;
         const parsed = parseResult<BookMeetingResult>(result);
         return parsed ? <BookedCard result={parsed} /> : null;
+      },
+    },
+    [],
+  );
+
+  // Knowledge gap (Flow E): ask where to send the answer, then show that the team got the question.
+  useHumanInTheLoop(
+    {
+      name: TOOL.captureEmail,
+      description:
+        "Ask the visitor for an email so the team can send the answer to a question the Wiki could not answer. " +
+        "Returns { email } or { declined: true }.",
+      parameters: captureEmailParams,
+      render: ({ status, args, respond, result }) => {
+        if (status === ToolCallStatus.Executing) return <EmailCapture question={args.question} onSubmit={(value) => void respond(value)} />;
+        if (status === ToolCallStatus.Complete) return <EmailCaptured result={parseResult<CaptureEmailResult>(result)} />;
+        return null;
+      },
+    },
+    [],
+  );
+
+  useRenderTool(
+    {
+      name: TOOL.logGap,
+      parameters: logGapParams,
+      render: ({ status, result }) => {
+        if (status !== "complete") return <GapCardLoading />;
+        const parsed = parseResult<LogGapResult>(result);
+        return parsed ? <GapCard result={parsed} /> : null;
       },
     },
     [],

@@ -1,6 +1,7 @@
 import { BuiltInAgent } from "@copilotkit/runtime/v2";
 import { bookMeetingTool } from "./tools/book-meeting";
 import { createLeadTool } from "./tools/create-lead";
+import { logGapTool } from "./tools/log-gap";
 import { notifyTeamTool } from "./tools/notify-team";
 import { searchKnowledgeTool } from "./tools/search-knowledge";
 import { getSlotsTool } from "./tools/slots";
@@ -9,11 +10,13 @@ import { getSlotsTool } from "./tools/slots";
 export const MODEL = process.env.CONCIERGE_MODEL ?? "anthropic:claude-sonnet-5";
 const COMPANY = process.env.CONCIERGE_COMPANY ?? "Acme";
 
-// Tool rules for knowledge gaps (S7), playbook and plans (S8) are added in those stages.
+// Tool rules for the playbook and plans (S8) are added in that stage.
 const PROMPT = `You are Concierge, the website assistant for ${COMPANY}. Visitors are potential customers.
 
 Knowledge: call search_knowledge before answering any product question. Answer only from its results.
-If it returns nothing, or nothing that answers the question, say you'll check with the team. Never guess.
+If it returns nothing, or nothing that answers the question, never guess: say you'll check with the team,
+call capture_email with the question (skip it if you already know their email), then call log_gap with
+the question and the email if they gave one.
 
 Qualifying: when a visitor shows buying interest, find out their company, name, email, how many seats and
 their timeline. Ask only for what is missing, in one short question. Once you know all five, call
@@ -31,6 +34,6 @@ export function createConciergeAgent() {
     model: MODEL,
     prompt: PROMPT,
     maxSteps: 8,
-    tools: [searchKnowledgeTool, createLeadTool, getSlotsTool, bookMeetingTool, notifyTeamTool],
+    tools: [searchKnowledgeTool, createLeadTool, getSlotsTool, bookMeetingTool, notifyTeamTool, logGapTool],
   });
 }

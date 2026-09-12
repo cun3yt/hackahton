@@ -16,7 +16,7 @@ Stage-by-stage record of the build in [`dev-plan.md`](dev-plan.md). Each stage e
 | S4 | M1 P1 | Ambiguous client + `search_knowledge`, `create_lead`, `notify_team` + smoke script | done |
 | S5 | M1 P2 | Acme website sections + `SourceCard`, `LeadCard` → checkpoint: Flow A without booking | done |
 | S6 | M2 | Booking: `get_slots`, `choose_slot` (SlotPicker), `book_meeting` (BookedCard) | done |
-| S7 | M2 | Flow E: `capture_email` (EmailCapture), `log_gap` (GapCard) | todo |
+| S7 | M2 | Flow E: `capture_email` (EmailCapture), `log_gap` (GapCard) | done |
 | S8 | M2 | Flow B playbook via `useAgentContext` + X1 `highlight_plan` → feature freeze | todo |
 | S9 | M3 | `scripts/reset-demo.ts` + split-screen setup | todo |
 | S10 | M4 | Rehearse twice, backup video | todo |
@@ -317,3 +317,55 @@ Chat: `I'm <name> from <new company>, <email>. About 60 seats, live in October. 
 ![S6: BookedCard](build/s6-booked-card.jpg)
 
 **Demo data now in the workspace:** deals Northline Freight, Cascade Haulers, Summit Freightways (+ `[SMOKE]`); bookings on Cuneyt's calendar Tue Sep 15 10:00 AM (Maria) and Wed Sep 16 2:00 PM (Priya); their `#sales` alerts. S9's reset must cancel bookings too.
+
+---
+
+## S7 — knowledge gap (Flow E)
+
+**Goal:** a question the Wiki can't answer becomes a task for the team (plus a chat heads-up); once someone writes the page, the next visitor gets the answer with a source.
+
+**Set up in Ambiguous**
+
+| What | Why |
+|---|---|
+| Tasks project **Website questions** (visibility workspace, created with Cuneyt's session) | Tasks outside a project are visible only to their creator (Concierge) and assignee: Cuneyt's login got `404` on the gap task, and subscribers don't get access either. In a workspace project, everyone (including the presenter's screen) sees it |
+
+**Files**
+
+| File | What |
+|---|---|
+| `lib/tools/log-gap.ts` | `POST /api/tasks` "FAQ gap: \"…\"" assigned to **Oskar** (`CONCIERGE_GAP_ASSIGNEE_ID`), project **Website questions** (`CONCIERGE_GAP_PROJECT`), description with the visitor's email; then a one-line heads-up in `#sales` (`CONCIERGE_GAP_CHANNEL`, default `sales`; a failed post doesn't lose the task). Link: `/tasks?project={id}` (opening a task doesn't change the URL) |
+| `lib/tools/channels.ts`, `lib/tools/notify-team.ts` | Shared `postToChannel(name, content)` |
+| `lib/tools/search-knowledge.ts` | Fallback also tries hyphen parts and 4-letter stems: "on-premise" / "on-premises deployment" now find a page titled "On-prem" |
+| `lib/agent.ts` | Gap rule: never guess → say you'll check → `capture_email` (skip if email known) → `log_gap` |
+| `components/concierge/cards/{EmailCapture,GapCard}.tsx`, `ConciergeWidget.tsx` | `capture_email` via `useHumanInTheLoop` (email field + Send/Skip; agent pauses); `log_gap` via `useRenderTool` |
+| `scripts/seed/on-prem.md` | The page text Oskar pastes live on stage (Wiki → Acme → new page "On-prem") |
+
+**Check it**
+
+1. Chat: `Do you offer on-prem?` → type an email → **Send**.
+2. Ambiguous: **Tasks → Projects → Website questions** (or `/tasks?project=…`) shows the task assigned to Oskar; **Chat → #sales** shows "❓ Website question with no Wiki answer…".
+3. Write Wiki → Acme → page **On-prem** (text in `scripts/seed/on-prem.md`), open a fresh chat, ask again → answer with an "On-prem ↗" source.
+4. Delete the On-prem page again before the demo (S9 automates this).
+
+**Result (2026-09-12, headless Chrome)**
+
+| Step | Seen |
+|---|---|
+| Ask | `search_knowledge` → 0 → "We don't have that documented, so let me check with the team on this one — could you share your email so we can follow up?" + EmailCapture card |
+| Send `jane@northline.example` | "We'll reply to jane@northline.example" → GapCard "✓ Sent to the Acme team · “Do you offer on-prem deployment?” · The answer goes to jane@northline.example" |
+| Ambiguous | Task `FAQ gap: "Do you offer on-prem deployment?"` (assignee Oskar, project Website questions, visible to Cuneyt); `#sales`: "❓ Website question with no Wiki answer: \"Do you offer on-prem deployment?\" / Task created for the team: …" |
+| On-prem page created, ask again (1st try) | Still "we don't have that documented": the model searched a variant ("on-premise…") that doesn't prefix-match "on-prem" → stem fallback added |
+| Ask again (after fix) | SourceCard "On-prem ↗ Yes. Acme offers an on-prem edition on the Enterprise plan…" → "Yes—Acme has an on-prem edition on our Enterprise plan, running on your own Linux servers via Docker…" |
+| Page deleted (moved to trash) | "on-prem", "on-premise", "on-premises deployment", "self-hosted" → 0 results each; `npm run smoke` all checks passed |
+
+![S7: EmailCapture](build/s7-email-capture.jpg)
+
+![S7: GapCard](build/s7-gap-card.jpg)
+
+![S7: answer after the page exists](build/s7-answer-after-page.jpg)
+
+**Notes**
+
+- The model rephrases the question ("Do you offer on-prem deployment?"); the task title uses its wording.
+- Trashed Wiki pages drop out of search immediately, so S9 can use a normal delete.
