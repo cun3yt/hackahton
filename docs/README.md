@@ -6,6 +6,7 @@ Context for our hackathon project: **Concierge**, a customer-facing AI agent for
 
 | Doc | Read when |
 |---|---|
+| [`concierge/demo-plan.md`](concierge/demo-plan.md) | Hackathon build: demo flows (with diagrams), 3-minute script, 3-hour plan, cuts, fallbacks |
 | [`concierge/concierge-design.md`](concierge/concierge-design.md) | Start here. Product idea, architecture, design decisions, generative UI catalog, hackathon plan, open questions |
 | [`ambiguous/ambiguous-context.md`](ambiguous/ambiguous-context.md) | Calling Ambiguous (REST, CLI, MCP), auth and API keys, event listening, sandbox, pricing |
 | [`copilotkit/copilotkit-context.md`](copilotkit/copilotkit-context.md) | Writing CopilotKit code: v2 runtime, hooks, generative UI, MCP, wiring to Ambiguous |
