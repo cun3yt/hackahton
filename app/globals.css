@@ -40,3 +40,33 @@ body {
   background: var(--ground);
   color: var(--ink);
 }
+
+/* X1: plan card highlighted by the agent (highlight_plan sets data-highlighted). */
+[data-plan][data-highlighted="true"] {
+  border-color: var(--signal);
+  box-shadow: 0 0 0 3px var(--signal), 0 18px 40px -20px rgba(242, 106, 27, 0.55);
+  transform: translateY(-4px);
+  position: relative;
+}
+
+[data-plan][data-highlighted="true"]::before {
+  content: "Best fit for you";
+  position: absolute;
+  top: -0.75rem;
+  left: 1.5rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 2px;
+  background: var(--signal);
+  color: #fff;
+  font-family: var(--font-barlow-condensed), sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-plan] {
+    transition: transform 300ms ease, box-shadow 300ms ease, border-color 300ms ease;
+  }
+}

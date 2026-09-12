@@ -17,7 +17,7 @@ Stage-by-stage record of the build in [`dev-plan.md`](dev-plan.md). Each stage e
 | S5 | M1 P2 | Acme website sections + `SourceCard`, `LeadCard` → checkpoint: Flow A without booking | done |
 | S6 | M2 | Booking: `get_slots`, `choose_slot` (SlotPicker), `book_meeting` (BookedCard) | done |
 | S7 | M2 | Flow E: `capture_email` (EmailCapture), `log_gap` (GapCard) | done |
-| S8 | M2 | Flow B playbook via `useAgentContext` + X1 `highlight_plan` → feature freeze | todo |
+| S8 | M2 | Flow B playbook via `useAgentContext` + X1 `highlight_plan` → feature freeze | done (freeze check moves to S9, after the reset script) |
 | S9 | M3 | `scripts/reset-demo.ts` + split-screen setup | todo |
 | S10 | M4 | Rehearse twice, backup video | todo |
 
@@ -369,3 +369,50 @@ Chat: `I'm <name> from <new company>, <email>. About 60 seats, live in October. 
 
 - The model rephrases the question ("Do you offer on-prem deployment?"); the task title uses its wording.
 - Trashed Wiki pages drop out of search immediately, so S9 can use a normal delete.
+
+---
+
+## S8 — playbook (Flow B) + agent drives the page (X1)
+
+**Goal:** the company changes Concierge's tone and offer by editing one Wiki page (no code, visible after a refresh); the agent highlights the right plan on the website itself.
+
+**Files**
+
+| File | What |
+|---|---|
+| `lib/playbook.ts` | Reads Wiki → Home → **Concierge playbook** (`CONCIERGE_PLAYBOOK_PAGE_ID`) with Concierge's key, `cache: "no-store"`. Parses `## Tone` / `formal` **and** `Tone: casual` styles; `Offer: none` → `null`. On error falls back to formal/no offer. `greetingFor()` builds the welcome text without a model call |
+| `app/page.tsx` | `await connection()` (Next 16: render per request) → `readPlaybook()` → passes `playbook` + `greeting` to the widget |
+| `components/concierge/ConciergeWidget.tsx` | `useAgentContext` with the playbook; welcome text from `greeting` (memoized labels); X1 `highlight_plan` via `useFrontendTool` (scrolls to `#plan-{plan}`, sets `data-highlighted`) |
+| `app/globals.css` | Highlight style: orange ring, lift, "Best fit for you" tag |
+| `lib/agent.ts` | Playbook rule (tone, offer only if not null, rules) and Plans rule (search pricing → `highlight_plan` → one sentence). **`providerOptions.anthropic.disableParallelToolUse: true`** |
+
+**Bug found and fixed:** Claude called `search_knowledge` (server) and `highlight_plan` (browser) in the same step. The browser tool ran, but the follow-up run failed with `AI_MissingToolResultsError: Tool result is missing for tool call …`, so the reply never came and the Next dev overlay showed "1 Issue". Disabling parallel tool use makes each step one tool; the rerun had 0 errors and a full reply.
+
+**Check it**
+
+- X1: ask `Which plan fits a team of 200 seats?` → page scrolls to Pricing, Growth highlighted.
+- Flow B: in Ambiguous change the playbook to Tone `casual`, Offer `20% off all plans this week` → refresh the website → greeting changes → ask `Do you have any discounts right now?`. Restore the page afterwards (text in `scripts/seed/concierge-playbook.md`; S9 automates it).
+
+**Result (2026-09-12, headless Chrome)**
+
+| Check | Seen |
+|---|---|
+| X1 | Sources Pricing/Integrations/FAQ → "Highlighted **Growth** on the pricing section" → "The Growth plan fits a 200-seat team perfectly, as it's designed for 25–500 seats with priority support and SAP/Salesforce integrations included." Page scrolled, Growth card ringed with "BEST FIT FOR YOU" |
+| Flow B before (formal, no offer) | Greeting "Welcome to Acme. How can I help you today?"; discounts → "At present, no discount or promotional offer is active. I would be pleased to share our standard pricing plans if that would be helpful to you." |
+| Flow B after edit + refresh | Greeting "Hey! 20% off all plans this week. What are you looking for?"; discounts → "We sure do — 20% off all plans this week if you sign up now! 🎉 Want me to point you to the right plan for your team size?" |
+| Restore | Playbook back to formal / none (stored now as editor JSON, same as a UI edit; parsed correctly) → greeting "Welcome to Acme. How can I help you today?" |
+| `tsc`, `eslint` | Clean |
+
+![S8: X1 highlight](build/s8-x1-highlight.jpg)
+
+![S8: greeting before](build/s8-greeting-before.jpg)
+
+![S8: greeting after the playbook edit](build/s8-greeting-after.jpg)
+
+![S8: discount answer after the edit](build/s8-discount-after.jpg)
+
+**Notes**
+
+- Playbook edits apply on the **next page load** (by design, matches the demo script "judge edits → refresh").
+- The playbook (tone, offer, rules) is sent to the browser as agent context, so a visitor could read it in dev tools. Fine for the demo; a production version would inject it server-side.
+- **Feature-freeze check** ("A, E, B each twice from a fresh page load") runs in S9, right after the reset script exists, so the reruns don't pile up duplicate deals, bookings and tasks.

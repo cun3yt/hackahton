@@ -1,6 +1,14 @@
 "use client";
 
-import { CopilotPopup, ToolCallStatus, useHumanInTheLoop, useRenderTool } from "@copilotkit/react-core/v2";
+import { useMemo } from "react";
+import {
+  CopilotPopup,
+  ToolCallStatus,
+  useAgentContext,
+  useFrontendTool,
+  useHumanInTheLoop,
+  useRenderTool,
+} from "@copilotkit/react-core/v2";
 import {
   TOOL,
   bookMeetingParams,
@@ -15,8 +23,11 @@ import {
   type LogGapResult,
   type SearchKnowledgeResult,
   getSlotsParams,
+  highlightPlanParams,
   logGapParams,
+  type Plan,
 } from "@/lib/contracts";
+import type { Playbook } from "@/lib/playbook";
 import { BookedCard, BookedCardLoading } from "./cards/BookedCard";
 import { EmailCapture, EmailCaptured } from "./cards/EmailCapture";
 import { GapCard, GapCardLoading } from "./cards/GapCard";
@@ -25,14 +36,53 @@ import { parseResult } from "./cards/parse";
 import { SlotPicked, SlotPicker, SlotPickerLoading } from "./cards/SlotPicker";
 import { SourceCard, SourceCardLoading } from "./cards/SourceCard";
 
-// Module-level constant: a new labels object on every render would re-trigger the chat configuration.
-const LABELS = {
-  modalHeaderTitle: "Acme assistant",
-  welcomeMessageText: "Hi! Ask me about Acme: integrations, pricing or getting your fleet set up.",
-  chatInputPlaceholder: "Ask about Acme…",
-};
+// X1: the agent drives the page. Scroll to the plan card and mark it; CSS in globals.css draws the highlight.
+function highlightPlan(plan: Plan) {
+  document.querySelectorAll("[data-plan]").forEach((card) => card.removeAttribute("data-highlighted"));
+  const card = document.getElementById(`plan-${plan}`);
+  if (!card) return false;
+  card.setAttribute("data-highlighted", "true");
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  return true;
+}
 
-export function ConciergeWidget() {
+export function ConciergeWidget({ playbook, greeting }: { playbook: Playbook; greeting: string }) {
+  // Stable labels object: a new one on every render would re-trigger the chat configuration.
+  const labels = useMemo(
+    () => ({
+      modalHeaderTitle: "Acme assistant",
+      welcomeMessageText: greeting,
+      chatInputPlaceholder: "Ask about Acme…",
+    }),
+    [greeting],
+  );
+
+  // Flow B: the company's playbook (Wiki → Home → Concierge playbook), read on page load.
+  useAgentContext({
+    description:
+      "Company playbook written by Acme in its Wiki. Use its tone for every reply, mention the offer when it is relevant " +
+      "(offer null = no offer, never invent one) and follow every rule.",
+    value: playbook,
+  });
+
+  useFrontendTool(
+    {
+      name: TOOL.highlightPlan,
+      description:
+        "Scroll the website to the pricing section and highlight one plan. Call when the visitor asks which plan fits them, " +
+        "after checking pricing with search_knowledge.",
+      parameters: highlightPlanParams,
+      handler: async ({ plan }) => (highlightPlan(plan) ? "highlighted" : `no plan card for ${plan}`),
+      render: ({ status, args }) =>
+        status === ToolCallStatus.Complete ? (
+          <div className="my-2 rounded-md border border-line bg-ground px-3 py-2 text-sm text-steel">
+            Highlighted <span className="font-semibold capitalize text-ink">{args.plan}</span> on the pricing section
+          </div>
+        ) : null,
+    },
+    [],
+  );
+
   useRenderTool(
     {
       name: TOOL.searchKnowledge,
@@ -132,6 +182,6 @@ export function ConciergeWidget() {
   // notify_team has no card on purpose: the alert shows up in Ambiguous #sales (right screen).
 
   return (
-    <CopilotPopup labels={LABELS} />
+    <CopilotPopup labels={labels} />
   );
 }
