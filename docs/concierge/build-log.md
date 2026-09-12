@@ -120,7 +120,7 @@ npx tsc --noEmit && npm run lint   # clean
 |---|---|
 | `lib/ambiguous.ts` | `ambi()` fetch helper: Bearer `AMBI_API_TOKEN`, `API-Version: 1`, retries 429 honoring `Retry-After`, errors include status + first 300 chars. `docToText()` flattens Wiki editor JSON to text |
 | `lib/tools/search-knowledge.ts` | `GET /api/wiki/search?q=&space=acme&limit=3`; if 0 hits, retries word by word; fetches each page (`GET /api/wiki/pages/{id}`) for `content` (≤2,000 chars). Link: `…/wiki/{space}/{page-slug}` |
-| `lib/tools/create-lead.ts` | `POST /api/crm/contacts` (company), `POST /api/crm/contacts` (person, linked), `POST /api/crm/deals` (open, linked). Deal title: `Northline Freight: 200 seats, live by Q4, SAP integration` |
+| `lib/tools/create-lead.ts` | `POST /api/crm/contacts` (company), `POST /api/crm/contacts` (person, linked), `POST /api/crm/deals` (open, linked, pipeline **Sales** / first stage; 409 → reuse existing deal). Deal title: `Northline Freight: 200 seats, live by Q4, SAP integration` |
 | `lib/tools/notify-team.ts` | Finds the `sales` channel via `GET /api/channels`, posts `🔥 Hot lead` + summary + deal link |
 | `lib/agent.ts` | Prompt: knowledge + qualifying rules; registers the 3 tools |
 | `scripts/smoke-tools.ts`, `package.json` (`npm run smoke`, `tsx`) | Read-only by default; `--write` also runs `create_lead` + `notify_team` with `[SMOKE]` names |
@@ -131,6 +131,7 @@ npx tsc --noEmit && npm run lint   # clean
 |---|---|---|
 | `CONCIERGE_WIKI_SPACE` | `acme` | The only Wiki space visitors can see. Internal pages (playbook) stay in `home` |
 | `CONCIERGE_SALES_CHANNEL` | `sales` | Channel for hot-lead alerts |
+| `CONCIERGE_PIPELINE` | `Sales` | CRM pipeline for new deals (first stage) |
 | `CONCIERGE_COMPANY` | `Acme` | Company name in the prompt |
 
 **Check it**
@@ -149,15 +150,29 @@ npm run smoke -- --write   # creates [SMOKE] company, contact, deal + one #sales
 | Chat runtime, "Do you integrate with SAP?" (`POST /api/copilotkit/agent/default/run`) | `TOOL_CALL_START search_knowledge {"query":"SAP integration"}` → `{"results":[]}` → reply: "I don't have that info handy, so I'll check with the team and follow up. In the meantime, are you exploring Acme for your company?" |
 | `tsc --noEmit`, `eslint` | Clean |
 
-**Still open before S4 is done**
+**Write test (2026-09-12, after Cuneyt created `#sales`)**
 
-1. S3 content exists (`Acme` space with an Integrations page mentioning SAP) → `npm run smoke` all green.
-2. `#sales` channel exists with Concierge as member → `npm run smoke -- --write` (needs a go: writes to the real workspace).
-3. Open the created deal in the browser to confirm the `…/crm/deals/{id}` link format (unverified guess).
+| Check | Seen |
+|---|---|
+| `npm run smoke -- --write`, 1st run | `create_lead ok`, `notify_team ok`, but the deal was **invisible on the CRM board** ("No pipelines configured") and Concierge's key got `404` reading its own deal |
+| Fix: pipeline | Created CRM pipeline **Sales** (API, Concierge key): New lead → Meeting booked → Proposal → Won / Lost. `PATCH` of `pipeline_id` on an existing deal is silently ignored, so `create_lead` now sets `pipeline_id` + first `stage_id` at creation |
+| Fix: reruns | Ambiguous answers `409 {"error":"Deal already exists","deal_id":…}` for a duplicate title; `create_lead` now reuses that `deal_id` |
+| Cleanup | Deleted all test CRM records (1 deal outside any pipeline, 3 `[SMOKE]` companies, 3 "Jane Doe" contacts) with Cuneyt's owner session: `204` each, CRM back to 0/0 |
+| `npm run smoke -- --write`, final run | `create_lead ok` → deal in **Sales / New lead** on the board; `notify_team ok` → "🔥 Hot lead" message from Concierge (AI) in `#sales` |
+| Deal link | `/crm/deals/{id}` opens the CRM overview; the app's real link is **`/crm/pipeline?deal={id}`** (now used) |
+
+![S4: deal on the CRM board](build/s4-crm-board.jpg)
+
+![S4: hot-lead messages in #sales](build/s4-sales-channel.jpg)
+
+**Left in the workspace on purpose:** 1 `[SMOKE]` company, contact and deal (Sales / New lead) and 2 `[SMOKE]` messages in `#sales`. S9's reset removes them.
+
+**Still open before S4 is done:** `search_knowledge "SAP"` needs Oskar's `Acme` space (S3) → `npm run smoke` all green.
 
 **Notes**
 
-- Web app routes seen: `/wiki/{space-slug}/{page-slug}`, `/crm`, `/tasks`, `/chat`.
+- Web app routes seen: `/wiki/{space-slug}/{page-slug}`, `/crm/pipeline?deal={id}`, `/chat/{channel-id}`, `/tasks`.
+- **Concierge can create deals but can't read them** (`GET /api/crm/deals` → 0, `GET /api/crm/deals/{id}` → 404, while the owner sees them, `owner_id` = Concierge). S6's "move deal to Meeting booked" may need another route; test it there.
 - The workspace (`HackathonCool`) shows `0 / 10,000 actions used · Trial`, not the Free plan's 1,000 from `ambiguous-context.md`.
 - **Env gotcha (hit on Cuneyt's terminal):** an empty variable already in the shell beats `.env.local`, both for `tsx --env-file` and for Next.js. oh-my-zsh's dotenv plugin sources `.env` on `cd`, and a `.env` copied from `.env.example` exports `AMBI_API_TOKEN=` and `ANTHROPIC_API_KEY=` empty. Symptom: `AMBI_API_TOKEN is empty`. Fix: keep secrets only in `.env.local`, no `.env`; in an open terminal run `unset AMBI_API_TOKEN ANTHROPIC_API_KEY AMBI_API_URL`.
 - Chat-created records carry no prefix (the audience sees them). S9's reset must find them another way (e.g. created by the Concierge agent), not by a `[DEMO]` title prefix.

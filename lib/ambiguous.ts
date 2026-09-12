@@ -5,6 +5,16 @@ export const AMBI_URL = process.env.AMBI_API_URL ?? "https://app.ambiguous.ai";
 
 type AmbiInit = Omit<RequestInit, "body"> & { json?: unknown };
 
+export class AmbiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly body: string,
+  ) {
+    super(message);
+  }
+}
+
 export async function ambi<T>(path: string, init: AmbiInit = {}): Promise<T> {
   const token = process.env.AMBI_API_TOKEN;
   if (!token) {
@@ -32,8 +42,8 @@ export async function ambi<T>(path: string, init: AmbiInit = {}): Promise<T> {
       continue;
     }
     if (!res.ok) {
-      const body = (await res.text()).slice(0, 300);
-      throw new Error(`Ambiguous ${method} ${path} failed with ${res.status}: ${body}`);
+      const body = await res.text();
+      throw new AmbiError(`Ambiguous ${method} ${path} failed with ${res.status}: ${body.slice(0, 300)}`, res.status, body);
     }
     return (await res.json()) as T;
   }
