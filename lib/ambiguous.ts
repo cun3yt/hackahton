@@ -7,7 +7,11 @@ type AmbiInit = Omit<RequestInit, "body"> & { json?: unknown };
 
 export async function ambi<T>(path: string, init: AmbiInit = {}): Promise<T> {
   const token = process.env.AMBI_API_TOKEN;
-  if (!token) throw new Error("AMBI_API_TOKEN is not set (see .env.local)");
+  if (!token) {
+    throw new Error(
+      "AMBI_API_TOKEN is empty. Set it in .env.local; if your shell exports an empty one (e.g. from .env), run: unset AMBI_API_TOKEN",
+    );
+  }
   const { json, headers, ...rest } = init;
   const method = rest.method ?? "GET";
 
