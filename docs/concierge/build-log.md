@@ -2,6 +2,8 @@
 
 Stage-by-stage record of the build in [`dev-plan.md`](dev-plan.md). Each stage ends with checks anyone can rerun. After each stage the build stops; the next one starts only when Cuneyt or Oskar confirms.
 
+**What each stage should look like:** [`stage-screens.md`](stage-screens.md) (ASCII sketches).
+
 **How to follow along:** `git log --oneline` shows one commit per stage (`build(sN): …`). Each stage below lists the files changed, how to check it, and what we saw.
 
 ## Stages
