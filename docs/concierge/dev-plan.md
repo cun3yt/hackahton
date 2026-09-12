@@ -54,18 +54,18 @@ scripts/
 
 ## Tool contracts (the P1 ↔ P2 interface)
 
-Agree on these at T+0 and write them to `lib/contracts.ts` with fixture data. P2 builds cards against fixtures while P1 builds the real tools.
+Source of truth: [`lib/contracts.ts`](../../lib/contracts.ts) (names, Zod parameter schemas, result types, fixtures). The table is a summary. P2 builds cards against `FIXTURES` while P1 builds the real tools.
 
 | Tool | Runs | Parameters | Result | Rendered by |
 |---|---|---|---|---|
-| `search_knowledge` | server | `query` | `{ results: { title, snippet, pageId, url }[] }` (empty = gap) | `SourceCard` via `useRenderTool` |
-| `create_lead` | server | `company, contactName, email?, seats, timeline, need` | `{ contactId, dealId, company, seats, timeline, dealUrl }` | `LeadCard` via `useRenderTool` |
+| `search_knowledge` | server | `query` | `{ results: { title, snippet, pageId, url, content? }[] }` (empty = gap; `content` is for the model) | `SourceCard` via `useRenderTool` |
+| `create_lead` | server | `company, contactName, email?, seats, timeline, need` | `{ contactId, dealId, company, seats, timeline, need, dealUrl }` | `LeadCard` via `useRenderTool` |
 | `get_slots` | server | `days?` | `{ slots: { start, label }[] }` | — (feeds `choose_slot`) |
 | `choose_slot` | browser | `slots` | `{ start } \| { declined: true }` | `SlotPicker` via `useHumanInTheLoop` |
-| `book_meeting` | server | `start, company, email?` | `{ confirmed, when, via: "scheduler" \| "task", url }` | `BookedCard` via `useRenderTool` |
+| `book_meeting` | server | `start, company, contactName, email` (scheduler requires email) | `{ confirmed, when, via: "scheduler" \| "task", url }` | `BookedCard` via `useRenderTool` |
 | `notify_team` | server | `summary, dealUrl?` | `{ messageId }` | nothing in widget (shows on right screen) |
 | `capture_email` | browser | `question` | `{ email } \| { declined: true }` | `EmailCapture` via `useHumanInTheLoop` |
-| `log_gap` | server | `question, email?` | `{ taskId, taskUrl }` | `GapCard` via `useRenderTool` |
+| `log_gap` | server | `question, email?` | `{ taskId, taskUrl, question, email? }` | `GapCard` via `useRenderTool` |
 | `highlight_plan` (X1) | browser | `plan: "starter" \| "growth" \| "enterprise"` | `"highlighted"` | the page itself via `useFrontendTool` |
 
 Rules: tool names are snake_case and unique across server and browser (a server tool silently wins a name collision). Server tools throw `Error` on failure so the model sees it.

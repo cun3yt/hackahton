@@ -11,7 +11,7 @@ Stage-by-stage record of the build in [`dev-plan.md`](dev-plan.md). Each stage e
 | Stage | Dev-plan milestone | Goal | Status |
 |---|---|---|---|
 | S1 | M0 P1 | Next.js + CopilotKit runtime + chat popup answers "hi" | done (68c8b7c) |
-| S2 | M0 both | `lib/contracts.ts`: tool result types + fixture data | todo |
+| S2 | M0 both | `lib/contracts.ts`: tool result types + fixture data | review (Oskar) |
 | S3 | M0 P2 | Seed Ambiguous: demo company Wiki pages, sales channel (writes to the real workspace) | todo |
 | S4 | M1 P1 | Ambiguous client + `search_knowledge`, `create_lead`, `notify_team` + smoke script | todo |
 | S5 | M1 P2 | Acme website sections + `SourceCard`, `LeadCard` → checkpoint: Flow A without booking | todo |
@@ -68,3 +68,42 @@ npx tsc --noEmit && npm run lint              # both clean
 - CopilotKit runtime telemetry is on by default. To turn it off, add `COPILOTKIT_TELEMETRY_DISABLED=true` to `.env.local`.
 - Use `localhost`, not `127.0.0.1`: Next 16 blocks dev resources (HMR) from other origins unless they're listed in `allowedDevOrigins`.
 - The `BuiltInAgent` instance lives at module scope, so it handles one run at a time. That's fine for a single-visitor demo (`copilotkit-context.md` gotcha 3).
+
+---
+
+## S2 — tool contracts
+
+**Goal:** one file both tracks build against. Track A implements tools that return these shapes; Track B builds cards from `FIXTURES` without waiting for Ambiguous.
+
+**Files**
+
+| File | What |
+|---|---|
+| `lib/contracts.ts` | `TOOL` names, Zod parameter schemas (used by server tools and browser hooks alike), result types, `FIXTURES` |
+| `docs/concierge/dev-plan.md` | Contract table synced; now points to `lib/contracts.ts` as source of truth |
+
+**Changes vs. the dev-plan table** (driven by the sketches in `stage-screens.md` and the Ambiguous API spec)
+
+| Tool | Change | Why |
+|---|---|---|
+| `search_knowledge` | Result hit gets optional `content` | Wiki search returns a ~65-character `snippet`: too short to answer from. The tool will also fetch page text for the model; cards ignore it |
+| `create_lead` | Result gets `need` | LeadCard shows "needs SAP" |
+| `book_meeting` | Params: `contactName` and `email` now required | `POST /api/public/scheduler/…/book` requires `guest_name` and `guest_email` |
+| `log_gap` | Result gets `question`, `email?` | GapCard shows the question and where the answer goes |
+
+**Findings from the Ambiguous API (read-only, Concierge key)**
+
+| Endpoint | Finding |
+|---|---|
+| `GET /api/wiki/search?q=` | `200`; hits have `id`, `title`, `slug`, `snippet`, `space_id` |
+| `GET /api/channels` | Only `general` (public) and Concierge's DM. **No `#sales` yet** |
+| `GET /api/crm/deals` | `0` deals |
+| `GET /api/crm/scheduler-links` | `0` links. `POST` exists (title, duration, `member_user_ids`, `auto_create_contact`), and public `…/slots?date=` + `…/book` exist → **S6 can book for real**; no need for the Task fallback unless it fails in testing |
+
+**Check it**
+
+```bash
+npx tsc --noEmit && npm run lint   # clean
+```
+
+**Result:** `tsc` and `eslint` clean. Awaiting Oskar's review of names and shapes before S5 builds on them.
