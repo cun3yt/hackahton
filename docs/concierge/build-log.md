@@ -14,7 +14,7 @@ Stage-by-stage record of the build in [`dev-plan.md`](dev-plan.md). Each stage e
 | S2 | M0 both | `lib/contracts.ts`: tool result types + fixture data | review (Oskar) |
 | S3 | M0 P2 | Seed Ambiguous: demo company Wiki pages, sales channel (writes to the real workspace) | done |
 | S4 | M1 P1 | Ambiguous client + `search_knowledge`, `create_lead`, `notify_team` + smoke script | done |
-| S5 | M1 P2 | Acme website sections + `SourceCard`, `LeadCard` → checkpoint: Flow A without booking | todo |
+| S5 | M1 P2 | Acme website sections + `SourceCard`, `LeadCard` → checkpoint: Flow A without booking | done |
 | S6 | M2 | Booking: `get_slots`, `choose_slot` (SlotPicker), `book_meeting` (BookedCard) | todo |
 | S7 | M2 | Flow E: `capture_email` (EmailCapture), `log_gap` (GapCard) | todo |
 | S8 | M2 | Flow B playbook via `useAgentContext` + X1 `highlight_plan` → feature freeze | todo |
@@ -216,3 +216,52 @@ npm run smoke    # all checks passed
 | Concierge `GET /api/wiki/pages/{playbook}` | `200`: readable for S8 |
 | Chat: "Do you integrate with SAP?" | `search_knowledge {"query":"SAP integration"}` → Pricing, Integrations → "Yes — Acme has a two-way SAP S/4HANA integration (syncing work orders, parts, and maintenance costs with SAP Plant Maintenance and Finance), typically set up in about a day. It's available on our Growth and Enterprise plans. Are you exploring this for your company currently?" |
 | Chat: "Do you offer on-prem?" | `search_knowledge {"query":"on-prem deployment"}` → `[]` → "We don't currently have on-prem details confirmed—I'll check with the team and get back to you." |
+
+---
+
+## S5 — Acme website + SourceCard, LeadCard
+
+**Goal (checkpoint):** Flow A without booking, in a real browser. "Do you integrate with SAP?" shows a source card; qualifying answers show a lead card, and the deal plus the alert appear in Ambiguous.
+
+Built by Claude (planned for Track B).
+
+**Files**
+
+| File | What |
+|---|---|
+| `app/globals.css`, `app/layout.tsx` | Acme brand tokens (asphalt ink, concrete ground, safety orange), Barlow / Barlow Condensed / Geist Mono; single light look; CopilotKit Inspector off (`enableInspector={false}`) for a clean stage |
+| `app/page.tsx`, `components/site/{Nav,Hero,Integrations,Pricing,Faq}.tsx` | Site with anchors `#product`, `#integrations`, `#pricing`, `#faq`. Pricing cards have `id="plan-{starter,growth,enterprise}"` + `data-plan` for X1. Numbers match the Wiki; FAQ has no hosting question |
+| `components/concierge/ConciergeWidget.tsx` | `CopilotPopup` (labels: "Acme assistant", welcome text) + `useRenderTool` for `search_knowledge` and `create_lead`. `notify_team` intentionally has no card |
+| `components/concierge/cards/{SourceCard,LeadCard,parse}.tsx` | Cards with loading states ("Searching Acme knowledge base for “SAP”…", "Passing Northline Freight to the sales team…"); tool results arrive as JSON strings |
+| `lib/tools/search-knowledge.ts` | Card snippet = the page line containing the query word (search snippets were cut mid-word); for a FAQ question line, the answer below it |
+| `lib/agent.ts` | Qualifying now asks for **email** too (5 facts), since S6 booking requires it |
+
+**Check it**
+
+Open http://localhost:3000 (Cuneyt: 3100), then type:
+1. `Do you integrate with SAP?`
+2. `I'm Jane Doe from Northline Freight. We'd need about 200 seats, live by Q4.`
+3. `jane@northline.example` (if asked)
+
+**Result (2026-09-12, headless Chrome)**
+
+| Step | Seen |
+|---|---|
+| 1 | SourceCard: "Integrations ↗ SAP S/4HANA: two-way sync of work orders, parts and maintenance costs…", "Pricing ↗ SAP S/4HANA and Salesforce integrations". Reply: "Yes — Acme has a native SAP S/4HANA connector (two-way sync of work orders, parts, and maintenance costs), available on Growth and Enterprise plans, typically set up in about a day." |
+| 2 | "I have everything except your email—could you share that so I can set up the deal?" |
+| 3 | LeadCard "✓ Sales team has your details · NORTHLINE FREIGHT · Seats 200 · Live by Q4 · Needs SAP integration" |
+| Ambiguous CRM | Deal `Northline Freight: 200 seats, live by Q4, SAP integration` in Sales / New lead (22:31:22 UTC) |
+| Ambiguous `#sales` | "🔥 Hot lead / Northline Freight (Jane Doe) - 200 seats, needs SAP integration. / Timeline: live by Q4. / …/crm/pipeline?deal=41869e0e…" (22:31:26 UTC) |
+| `tsc`, `eslint` | Clean |
+
+![S5: Acme website](build/s5-site.jpg)
+
+![S5: SourceCard](build/s5-source-card.jpg)
+
+![S5: LeadCard](build/s5-lead-card.jpg)
+
+**Notes**
+
+- **Browser automation:** the Claude-in-Chrome extension in Dia timed out ("page is busy") on this page even though the renderer used ~10% CPU and headless Chrome rendered it instantly. The checks above therefore ran in headless Google Chrome driven over the DevTools protocol. A human in Dia sees the page normally.
+- The popup opens by default on page load.
+- A real `Northline Freight` deal now exists. A rerun reuses it (409 handling from S4), but `create_lead` still adds a new company and contact each time. Run S9's reset before the demo.

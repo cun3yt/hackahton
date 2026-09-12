@@ -34,17 +34,35 @@ async function searchWithFallback(query: string): Promise<SearchHit[]> {
   return [...seen.values()].slice(0, MAX_HITS);
 }
 
+// Search snippets are cut mid-word ("…luded in every plan"). Prefer the page line that contains a query word,
+// trying words in the order the model gave them; for a FAQ question line, show the answer below it.
+function matchingLine(text: string, query: string): string | undefined {
+  const lines = text
+    .split("\n")
+    .map((l) => l.replace(/^[-#*\s]+/, "").replace(/\*\*/g, "").trim())
+    .filter(Boolean);
+  const words = query.toLowerCase().split(/[^a-z0-9/-]+/).filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+  for (const word of words) {
+    const index = lines.findIndex((l) => l.length > 15 && l.toLowerCase().includes(word));
+    if (index === -1) continue;
+    const line = lines[index].endsWith("?") && lines[index + 1] ? lines[index + 1] : lines[index];
+    return line.length > 160 ? `${line.slice(0, 157)}…` : line;
+  }
+  return undefined;
+}
+
 export async function searchKnowledge(query: string): Promise<SearchKnowledgeResult> {
   const hits = await searchWithFallback(query);
   const results: KnowledgeHit[] = await Promise.all(
     hits.map(async (hit) => {
       const page = await ambi<Page>(`/api/wiki/pages/${hit.id}`);
+      const text = docToText(page.content);
       return {
         title: hit.title,
-        snippet: hit.snippet,
+        snippet: matchingLine(text, query) ?? hit.snippet,
         pageId: hit.id,
         url: `${AMBI_URL}/wiki/${SPACE}/${hit.slug}`,
-        content: docToText(page.content).slice(0, MAX_CONTENT_CHARS),
+        content: text.slice(0, MAX_CONTENT_CHARS),
       };
     }),
   );
