@@ -12,8 +12,8 @@ Stage-by-stage record of the build in [`dev-plan.md`](dev-plan.md). Each stage e
 |---|---|---|---|
 | S1 | M0 P1 | Next.js + CopilotKit runtime + chat popup answers "hi" | done (68c8b7c) |
 | S2 | M0 both | `lib/contracts.ts`: tool result types + fixture data | review (Oskar) |
-| S3 | M0 P2 | Seed Ambiguous: demo company Wiki pages, sales channel (writes to the real workspace) | in progress (Oskar: Wiki; Cuneyt: #sales) |
-| S4 | M1 P1 | Ambiguous client + `search_knowledge`, `create_lead`, `notify_team` + smoke script | review (write test waits for S3 + go) |
+| S3 | M0 P2 | Seed Ambiguous: demo company Wiki pages, sales channel (writes to the real workspace) | done |
+| S4 | M1 P1 | Ambiguous client + `search_knowledge`, `create_lead`, `notify_team` + smoke script | done |
 | S5 | M1 P2 | Acme website sections + `SourceCard`, `LeadCard` → checkpoint: Flow A without booking | todo |
 | S6 | M2 | Booking: `get_slots`, `choose_slot` (SlotPicker), `book_meeting` (BookedCard) | todo |
 | S7 | M2 | Flow E: `capture_email` (EmailCapture), `log_gap` (GapCard) | todo |
@@ -167,7 +167,7 @@ npm run smoke -- --write   # creates [SMOKE] company, contact, deal + one #sales
 
 **Left in the workspace on purpose:** 1 `[SMOKE]` company, contact and deal (Sales / New lead) and 2 `[SMOKE]` messages in `#sales`. S9's reset removes them.
 
-**Still open before S4 is done:** `search_knowledge "SAP"` needs Oskar's `Acme` space (S3) → `npm run smoke` all green.
+**S4 done** once S3 landed: `npm run smoke` → `all checks passed` (see S3).
 
 **Notes**
 
@@ -176,3 +176,43 @@ npm run smoke -- --write   # creates [SMOKE] company, contact, deal + one #sales
 - The workspace (`HackathonCool`) shows `0 / 10,000 actions used · Trial`, not the Free plan's 1,000 from `ambiguous-context.md`.
 - **Env gotcha (hit on Cuneyt's terminal):** an empty variable already in the shell beats `.env.local`, both for `tsx --env-file` and for Next.js. oh-my-zsh's dotenv plugin sources `.env` on `cd`, and a `.env` copied from `.env.example` exports `AMBI_API_TOKEN=` and `ANTHROPIC_API_KEY=` empty. Symptom: `AMBI_API_TOKEN is empty`. Fix: keep secrets only in `.env.local`, no `.env`; in an open terminal run `unset AMBI_API_TOKEN ANTHROPIC_API_KEY AMBI_API_URL`.
 - Chat-created records carry no prefix (the audience sees them). S9's reset must find them another way (e.g. created by the Concierge agent), not by a `[DEMO]` title prefix.
+
+---
+
+## S3 — Wiki content + sales channel
+
+**Goal:** Acme's knowledge lives in Ambiguous, so the agent answers from it; one deliberate gap (on-prem) for Flow E; a playbook page for Flow B.
+
+Done by Claude through the API with Cuneyt's CLI session (pages show Cuneyt as author); `#sales` created by Cuneyt in the app.
+
+**Created in Ambiguous**
+
+| What | Where | Source in repo |
+|---|---|---|
+| Space **Acme** (`acme`, visibility workspace) | Wiki | — |
+| Product, Integrations, Pricing, FAQ | Wiki → Acme | `scripts/seed/{product,integrations,pricing,faq}.md` |
+| Concierge playbook (Tone: formal, Offer: none, 3 rules) | Wiki → **Home** (internal, not searchable by visitors) | `scripts/seed/concierge-playbook.md` |
+| `#sales` (public, 3 members) | Chat | — |
+| Pipeline **Sales** (New lead → Meeting booked → Proposal → Won / Lost) | CRM | created during S4 |
+
+**Content rules the demo depends on**
+
+- Integrations says "SAP S/4HANA" (Flow A). Pricing says Growth is the best fit for 25–500 seats (X1: 200 seats → Growth).
+- No page mentions on-prem, self-hosting, cloud, deploy, install or servers (checked with `grep`), so "Do you offer on-prem?" stays a real gap (Flow E). Mentioning "cloud" would let the agent infer an answer.
+- The playbook sits in `home`, outside the searchable `acme` space: a visitor asking about discounts can't get the internal rules as a source.
+
+**Check it**
+
+```bash
+npm run smoke    # all checks passed
+```
+
+**Result (2026-09-12)**
+
+| Check | Seen |
+|---|---|
+| `npm run smoke` | `search_knowledge "SAP" ok 2 result(s): Pricing, Integrations`; `"on-prem" ok 0 results`; **all checks passed** |
+| Visitor search for "discount" in `acme` | `[]`: playbook not exposed |
+| Concierge `GET /api/wiki/pages/{playbook}` | `200`: readable for S8 |
+| Chat: "Do you integrate with SAP?" | `search_knowledge {"query":"SAP integration"}` → Pricing, Integrations → "Yes — Acme has a two-way SAP S/4HANA integration (syncing work orders, parts, and maintenance costs with SAP Plant Maintenance and Finance), typically set up in about a day. It's available on our Growth and Enterprise plans. Are you exploring this for your company currently?" |
+| Chat: "Do you offer on-prem?" | `search_knowledge {"query":"on-prem deployment"}` → `[]` → "We don't currently have on-prem details confirmed—I'll check with the team and get back to you." |
