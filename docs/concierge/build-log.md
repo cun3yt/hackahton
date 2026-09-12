@@ -12,8 +12,8 @@ Stage-by-stage record of the build in [`dev-plan.md`](dev-plan.md). Each stage e
 |---|---|---|---|
 | S1 | M0 P1 | Next.js + CopilotKit runtime + chat popup answers "hi" | done (68c8b7c) |
 | S2 | M0 both | `lib/contracts.ts`: tool result types + fixture data | review (Oskar) |
-| S3 | M0 P2 | Seed Ambiguous: demo company Wiki pages, sales channel (writes to the real workspace) | todo |
-| S4 | M1 P1 | Ambiguous client + `search_knowledge`, `create_lead`, `notify_team` + smoke script | todo |
+| S3 | M0 P2 | Seed Ambiguous: demo company Wiki pages, sales channel (writes to the real workspace) | in progress (Oskar: Wiki; Cuneyt: #sales) |
+| S4 | M1 P1 | Ambiguous client + `search_knowledge`, `create_lead`, `notify_team` + smoke script | review (write test waits for S3 + go) |
 | S5 | M1 P2 | Acme website sections + `SourceCard`, `LeadCard` → checkpoint: Flow A without booking | todo |
 | S6 | M2 | Booking: `get_slots`, `choose_slot` (SlotPicker), `book_meeting` (BookedCard) | todo |
 | S7 | M2 | Flow E: `capture_email` (EmailCapture), `log_gap` (GapCard) | todo |
@@ -107,3 +107,56 @@ npx tsc --noEmit && npm run lint   # clean
 ```
 
 **Result:** `tsc` and `eslint` clean. Awaiting Oskar's review of names and shapes before S5 builds on them.
+
+---
+
+## S4 — server tools + smoke script
+
+**Goal:** the agent can read the Wiki and write to the CRM and Chat. Each tool is testable from a terminal, without the chat.
+
+**Files**
+
+| File | What |
+|---|---|
+| `lib/ambiguous.ts` | `ambi()` fetch helper: Bearer `AMBI_API_TOKEN`, `API-Version: 1`, retries 429 honoring `Retry-After`, errors include status + first 300 chars. `docToText()` flattens Wiki editor JSON to text |
+| `lib/tools/search-knowledge.ts` | `GET /api/wiki/search?q=&space=acme&limit=3`; if 0 hits, retries word by word; fetches each page (`GET /api/wiki/pages/{id}`) for `content` (≤2,000 chars). Link: `…/wiki/{space}/{page-slug}` |
+| `lib/tools/create-lead.ts` | `POST /api/crm/contacts` (company), `POST /api/crm/contacts` (person, linked), `POST /api/crm/deals` (open, linked). Deal title: `Northline Freight: 200 seats, live by Q4, SAP integration` |
+| `lib/tools/notify-team.ts` | Finds the `sales` channel via `GET /api/channels`, posts `🔥 Hot lead` + summary + deal link |
+| `lib/agent.ts` | Prompt: knowledge + qualifying rules; registers the 3 tools |
+| `scripts/smoke-tools.ts`, `package.json` (`npm run smoke`, `tsx`) | Read-only by default; `--write` also runs `create_lead` + `notify_team` with `[SMOKE]` names |
+
+**Settings (optional, `.env.local`)**
+
+| Variable | Default | Use |
+|---|---|---|
+| `CONCIERGE_WIKI_SPACE` | `acme` | The only Wiki space visitors can see. Internal pages (playbook) stay in `home` |
+| `CONCIERGE_SALES_CHANNEL` | `sales` | Channel for hot-lead alerts |
+| `CONCIERGE_COMPANY` | `Acme` | Company name in the prompt |
+
+**Check it**
+
+```bash
+npm run smoke              # read-only
+npm run smoke -- --write   # creates [SMOKE] company, contact, deal + one #sales message
+```
+
+**Result so far (2026-09-12)**
+
+| Check | Seen |
+|---|---|
+| `npm run smoke` (read-only) | `search_knowledge "SAP"` **FAIL: 0 results**, expected: the `Acme` space doesn't exist yet (S3). `"on-prem"` ok, 0 results |
+| Search against `home` space, query "how AI coworkers work" | Phrase search 0 → word fallback → 3 pages with text content; link `https://app.ambiguous.ai/wiki/home/welcome` matches the browser URL |
+| Chat runtime, "Do you integrate with SAP?" (`POST /api/copilotkit/agent/default/run`) | `TOOL_CALL_START search_knowledge {"query":"SAP integration"}` → `{"results":[]}` → reply: "I don't have that info handy, so I'll check with the team and follow up. In the meantime, are you exploring Acme for your company?" |
+| `tsc --noEmit`, `eslint` | Clean |
+
+**Still open before S4 is done**
+
+1. S3 content exists (`Acme` space with an Integrations page mentioning SAP) → `npm run smoke` all green.
+2. `#sales` channel exists with Concierge as member → `npm run smoke -- --write` (needs a go: writes to the real workspace).
+3. Open the created deal in the browser to confirm the `…/crm/deals/{id}` link format (unverified guess).
+
+**Notes**
+
+- Web app routes seen: `/wiki/{space-slug}/{page-slug}`, `/crm`, `/tasks`, `/chat`.
+- The workspace (`HackathonCool`) shows `0 / 10,000 actions used · Trial`, not the Free plan's 1,000 from `ambiguous-context.md`.
+- Chat-created records carry no prefix (the audience sees them). S9's reset must find them another way (e.g. created by the Concierge agent), not by a `[DEMO]` title prefix.
