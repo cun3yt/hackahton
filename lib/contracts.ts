@@ -49,6 +49,7 @@ export const bookMeetingParams = z.object({
   company: z.string().min(1),
   contactName: z.string().min(1),
   email: z.string().email().describe("Required by the Ambiguous scheduler; ask the visitor first"),
+  dealId: z.string().optional().describe("dealId from create_lead; the deal moves to 'Meeting booked'"),
 });
 
 export const notifyTeamParams = z.object({

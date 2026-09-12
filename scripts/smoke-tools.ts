@@ -1,9 +1,10 @@
 // Runs each server tool against the real Ambiguous workspace, without the chat.
-//   npm run smoke            read-only: search_knowledge
+//   npm run smoke            read-only: search_knowledge, get_slots
 //   npm run smoke -- --write also create_lead + notify_team ([SMOKE] records, one #sales message)
 import { createLead } from "../lib/tools/create-lead";
 import { notifyTeam } from "../lib/tools/notify-team";
 import { searchKnowledge } from "../lib/tools/search-knowledge";
+import { getSlots } from "../lib/tools/slots";
 
 const write = process.argv.includes("--write");
 let failed = 0;
@@ -29,6 +30,12 @@ async function main() {
     const { results } = await searchKnowledge("on-prem");
     if (results.length > 0) throw new Error(`expected 0, got: ${results.map((r) => r.title).join(", ")}`);
     return "0 results, gap as intended";
+  });
+
+  await check("get_slots", "days=3", async () => {
+    const { slots } = await getSlots(3);
+    if (slots.length === 0) throw new Error("0 slots: is the 'acme-demo' scheduler link active?");
+    return `${slots.length} slot(s): ${slots.map((s) => s.label).join(" | ")}`;
   });
 
   if (!write) {

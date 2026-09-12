@@ -15,7 +15,7 @@ Stage-by-stage record of the build in [`dev-plan.md`](dev-plan.md). Each stage e
 | S3 | M0 P2 | Seed Ambiguous: demo company Wiki pages, sales channel (writes to the real workspace) | done |
 | S4 | M1 P1 | Ambiguous client + `search_knowledge`, `create_lead`, `notify_team` + smoke script | done |
 | S5 | M1 P2 | Acme website sections + `SourceCard`, `LeadCard` → checkpoint: Flow A without booking | done |
-| S6 | M2 | Booking: `get_slots`, `choose_slot` (SlotPicker), `book_meeting` (BookedCard) | todo |
+| S6 | M2 | Booking: `get_slots`, `choose_slot` (SlotPicker), `book_meeting` (BookedCard) | done |
 | S7 | M2 | Flow E: `capture_email` (EmailCapture), `log_gap` (GapCard) | todo |
 | S8 | M2 | Flow B playbook via `useAgentContext` + X1 `highlight_plan` → feature freeze | todo |
 | S9 | M3 | `scripts/reset-demo.ts` + split-screen setup | todo |
@@ -265,3 +265,55 @@ Open http://localhost:3000 (Cuneyt: 3100), then type:
 - **Browser automation:** the Claude-in-Chrome extension in Dia timed out ("page is busy") on this page even though the renderer used ~10% CPU and headless Chrome rendered it instantly. The checks above therefore ran in headless Google Chrome driven over the DevTools protocol. A human in Dia sees the page normally.
 - The popup opens by default on page load.
 - A real `Northline Freight` deal now exists. A rerun reuses it (409 handling from S4), but `create_lead` still adds a new company and contact each time. Run S9's reset before the demo.
+
+---
+
+## S6 — booking (end of Flow A)
+
+**Goal:** the visitor picks a time in the chat, the call is booked in Ambiguous, the deal moves to *Meeting booked*, and sales gets an alert with the meeting time.
+
+**Set up in Ambiguous (API, Cuneyt's session)**
+
+| What | Details |
+|---|---|
+| CRM scheduler link **Acme demo call** | id `34e3cbf3…`, owner Cuneyt, slug `acme-demo`, 30 min, 60 min notice, 14 days ahead, `auto_create_contact: false`. Public path `/api/public/scheduler/hackathoncool/cuneyt.mertayak/acme-demo` (no auth needed) |
+| Business hours | `{"mon".."fri": ["16:00","24:00"]}`. **Quirk:** Ambiguous applies these hours in UTC and ignores the link's `America/Los_Angeles` timezone (a test booking at "09:00" became a 09:00 UTC = 2 AM PT calendar event; cancelled). 16:00–24:00 UTC = 9:00 AM–5:00 PM PDT. Revisit if the demo runs after DST ends (Nov 1) |
+
+**Files**
+
+| File | What |
+|---|---|
+| `lib/tools/scheduler.ts` | Link path (`CONCIERGE_SCHEDULER_LINK`), timezone (`CONCIERGE_TIMEZONE`, default `America/Los_Angeles`), slot labels |
+| `lib/tools/slots.ts` | `get_slots`: next 3 business days, first free slot from 10:00 and from 14:00 local → up to 6 slots |
+| `lib/tools/book-meeting.ts` | `book_meeting`: `POST …/book`; then moves the deal to *Meeting booked* (best effort). If booking fails → **Task fallback** for the sales rep (`via: "task"`, untested) |
+| `lib/contracts.ts` | `bookMeetingParams` gets optional `dealId` |
+| `lib/agent.ts` | Meetings rule: after `create_lead` offer a call → `get_slots` → `choose_slot` → `book_meeting` → `notify_team` with the meeting time; declined → `notify_team` right away |
+| `components/concierge/cards/{SlotPicker,BookedCard}.tsx`, `ConciergeWidget.tsx` | `choose_slot` via `useHumanInTheLoop` (agent pauses until a click; "None of these work" → declined); `book_meeting` via `useRenderTool`; "Finding times…" while `get_slots` runs |
+| `scripts/smoke-tools.ts` | Read-only `get_slots` check |
+
+**Findings**
+
+- Concierge's key **can** move a deal between stages (`PATCH /api/crm/deals/{id}`); the S4 read problem only affected the deal without a pipeline.
+- Concierge can't list the owner's scheduler links (`GET /api/crm/scheduler-links` → 0), so the link path is configured, not discovered.
+- `create_lead` requires `need`; if the visitor never mentions one, the agent asks for it (one extra turn). Flow A's SAP question covers it.
+
+**Check it**
+
+```bash
+npm run smoke   # includes get_slots
+```
+Chat: `I'm <name> from <new company>, <email>. About 60 seats, live in October. Can I talk to someone?` → answer the need question → click a time.
+
+**Result (2026-09-12, headless Chrome)**
+
+| Run | Seen |
+|---|---|
+| `npm run smoke` | `get_slots ok 6 slot(s): Mon, Sep 14, 10:00 AM \| … \| Wed, Sep 16, 2:30 PM`; all checks passed |
+| Maria Chen, Cascade Haulers (SAP question → details → "Yes, let's set up a call." → click Tue 10:00 AM) | LeadCard → SlotPicker → "Picked Tue, Sep 15, 10:00 AM". Ambiguous: booking **confirmed** 2026-09-15T17:00Z; deal → **Meeting booked**; `#sales`: "🔥 Hot lead / Cascade Haulers (Maria Chen) — 120 seats, live by November, needs SAP integration. / Meeting booked Tue, Sep 15, 10:00 AM–10:30 AM." |
+| Priya Nair, Summit Freightways (details + "Can I talk to someone?" → need → click Wed 2:00 PM) | SlotPicker (Tue shows 10:30 AM: 10:00 is taken by Maria) → BookedCard "✓ Call booked · WED, SEP 16, 2:00 PM–2:30 PM". Deal → Meeting booked; `#sales` alert includes the meeting time |
+
+![S6: SlotPicker](build/s6-slot-picker.jpg)
+
+![S6: BookedCard](build/s6-booked-card.jpg)
+
+**Demo data now in the workspace:** deals Northline Freight, Cascade Haulers, Summit Freightways (+ `[SMOKE]`); bookings on Cuneyt's calendar Tue Sep 15 10:00 AM (Maria) and Wed Sep 16 2:00 PM (Priya); their `#sales` alerts. S9's reset must cancel bookings too.
