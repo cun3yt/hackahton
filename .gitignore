@@ -1,0 +1,12 @@
+# secrets
+.env*
+!.env.example
+.ambi/
+
+# node / next
+node_modules/
+.next/
+out/
+
+# os
+.DS_Store
