@@ -8,7 +8,7 @@ Stage-by-stage record of the build in [`dev-plan.md`](dev-plan.md). Each stage e
 
 | Stage | Dev-plan milestone | Goal | Status |
 |---|---|---|---|
-| S1 | M0 P1 | Next.js + CopilotKit runtime + chat popup answers "hi" | review |
+| S1 | M0 P1 | Next.js + CopilotKit runtime + chat popup answers "hi" | done (68c8b7c) |
 | S2 | M0 both | `lib/contracts.ts`: tool result types + fixture data | todo |
 | S3 | M0 P2 | Seed Ambiguous: demo company Wiki pages, sales channel (writes to the real workspace) | todo |
 | S4 | M1 P1 | Ambiguous client + `search_knowledge`, `create_lead`, `notify_team` + smoke script | todo |
